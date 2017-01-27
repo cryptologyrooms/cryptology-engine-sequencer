@@ -175,6 +175,14 @@ static void handle_state(int state)
 		halt();
 
 		break;
+	case STATE_FAILED:
+		digitalWrite(LED_PINS[0], LOW);
+		digitalWrite(LED_PINS[1], LOW);
+		digitalWrite(LED_PINS[2], LOW);
+		digitalWrite(LED_PINS[3], LOW);
+		digitalWrite(COMPLETE_PIN, LOW);
+		digitalWrite(MP3_TRIGGER_PIN, HIGH);
+		break;
 	}
 }
 
