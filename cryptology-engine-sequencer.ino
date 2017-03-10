@@ -1,5 +1,17 @@
 #include <TaskAction.h>
 
+////
+////
+static const char * SEQUENCE = "FAIC"; // <---- Set the correct sequence here
+////
+////
+
+////
+////
+static const float TRIGGER_VOLTAGE = 0.5; // <---- Set the voltage under which the switch is ON
+////
+////
+
 static const int NUMBER_OF_SWITCHES = 10;
 
 static const int SWITCH_PINS[NUMBER_OF_SWITCHES] = {A0, A1, A2, A3, A4, A5, 3, 4, 5, 6};
@@ -10,10 +22,10 @@ static const int LED_PINS[] = {7, 8, 9, 10};
 
 static const int COMPLETE_PIN = 10;
 
-static const bool STATE_1_SWITCHES[NUMBER_OF_SWITCHES] = {false, false, false, false, false, true, false, false, false, false};
-static const bool STATE_2_SWITCHES[NUMBER_OF_SWITCHES] = {true, false, false, false, false, true, false, false, false, false};
-static const bool STATE_3_SWITCHES[NUMBER_OF_SWITCHES] = {true, false, false, false, false, true, false, false, true, false};
-static const bool STATE_4_SWITCHES[NUMBER_OF_SWITCHES] = {true, false, true, false, false, true, false, false, true, false};
+static bool STATE_1_SWITCHES[NUMBER_OF_SWITCHES] = {false, false, false, false, false, true, false, false, false, false};
+static bool STATE_2_SWITCHES[NUMBER_OF_SWITCHES] = {true, false, false, false, false, true, false, false, false, false};
+static bool STATE_3_SWITCHES[NUMBER_OF_SWITCHES] = {true, false, false, false, false, true, false, false, true, false};
+static bool STATE_4_SWITCHES[NUMBER_OF_SWITCHES] = {true, false, true, false, false, true, false, false, true, false};
 
 static int s_switch_debounce[] = {0,0,0,0,0,0,0,0,0,0};
 static const int DEBOUNCE_MAX = 50;
@@ -193,20 +205,26 @@ static void toggle_debug_led()
 	state = !state;
 }
 
-static void debug_task_fn(TaskAction * this_task)
+static void print_states(Stream& stream, bool * states, const int n)
 {
-	(void)this_task;
 	int i;
-	Serial.print("Switch states: ");
-	for (i = 0; i < NUMBER_OF_SWITCHES; i++)
+	for (i = 0; i < n; i++)
 	{
-		Serial.print(s_switch_states[i] ? '1' : '0');
-		if (i < NUMBER_OF_SWITCHES-1)
+		stream.print(states[i] ? '1' : '0');
+		if (i < n-1)
 		{
-			Serial.print(", ");
+			stream.print(", ");
 		}
 	}
 	Serial.println("");
+}
+
+static void debug_task_fn(TaskAction * this_task)
+{
+	(void)this_task;
+
+	Serial.print("Switch states: ");
+	print_states(Serial, s_switch_states, NUMBER_OF_SWITCHES);
 	Serial.print("Application state ");
 	Serial.println(s_state);
 
@@ -214,9 +232,22 @@ static void debug_task_fn(TaskAction * this_task)
 }
 static TaskAction s_debug_task(debug_task_fn, 1000, INFINITE_TICKS);
 
+static bool get_switch_state(int i)
+{
+	if (i <= 5)
+	{
+		// Treat as analog pin, needs to be <0.5V to trigger
+		return analogRead(SWITCH_PINS[i]) < (TRIGGER_VOLTAGE * 1023.0f / 5.0f);
+	}
+	else
+	{
+		return digitalRead(SWITCH_PINS[i]) == LOW;
+	}
+}
+
 static void debounce_switch(int i)
 {
-	bool state = digitalRead(SWITCH_PINS[i]) == LOW;
+	bool state = get_switch_state(i);
 
 	s_switch_debounce[i] += state ? 1 : -1;
 	s_switch_debounce[i] = max(s_switch_debounce[i], 0);
@@ -246,11 +277,42 @@ static void init_switch_states()
 	}
 }
 
+static void setup_state(int state, char const * const seq, bool s1_switches[10], bool s2_switches[10], bool s3_switches[10], bool s4_switches[10])
+{
+	int seq_position = 0 + (int)(seq[state] - 'A');
+
+	switch(state)
+	{
+	case 0:
+		s1_switches[seq_position] = true;
+		// Fall through
+	case 1:
+		s2_switches[seq_position] = true;
+		// Fall through
+	case 2:
+		s3_switches[seq_position] = true;
+		// Fall through
+	case 3:
+		s4_switches[seq_position] = true;
+		break;
+	}
+
+}
+
 void setup()
 {
 	Serial.begin(115200);
 	
 	setup_io();
+
+	setup_state(0, SEQUENCE, STATE_1_SWITCHES, STATE_2_SWITCHES, STATE_3_SWITCHES, STATE_4_SWITCHES);
+	print_states(Serial, STATE_1_SWITCHES, NUMBER_OF_SWITCHES);
+	setup_state(1, SEQUENCE, STATE_1_SWITCHES, STATE_2_SWITCHES, STATE_3_SWITCHES, STATE_4_SWITCHES);
+	print_states(Serial, STATE_2_SWITCHES, NUMBER_OF_SWITCHES);
+	setup_state(2, SEQUENCE, STATE_1_SWITCHES, STATE_2_SWITCHES, STATE_3_SWITCHES, STATE_4_SWITCHES);
+	print_states(Serial, STATE_3_SWITCHES, NUMBER_OF_SWITCHES);
+	setup_state(3, SEQUENCE, STATE_1_SWITCHES, STATE_2_SWITCHES, STATE_3_SWITCHES, STATE_4_SWITCHES);
+	print_states(Serial, STATE_4_SWITCHES, NUMBER_OF_SWITCHES);
 
 	init_switch_states();
 }
